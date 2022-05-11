@@ -22,21 +22,24 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res, next) => {
 
-
+    console.log(posts)
     if (req.signedCookies.loginName || req.cookies.loginName) {
-        res.end(`
+        res.write(`
       <div><a href="/">homepage</a></div>
       <div>welcome back, ${req.signedCookies.loginName?req.signedCookies.loginName:req.cookies.loginName}</div>
       <div><a href="/post-a-thread">post</a></div>
       <div><a href="/logout">Logout</a></div>
     `)
     } else {
-        res.end(`
+        res.write(`
       <div><a href="/">homepage</a></div>
       <div><a href="/register">Register</a></div>
       <div><a href="/post-a-thread">post</a></div>
       <div><a href="/login">Login</a></div>
     `)
+    }
+    for (var post of posts) {
+        res.write(`<div><a href="/post/${post.id}">${post.title}</a></div>`)
     }
 
 
@@ -146,6 +149,48 @@ app.post("/post-a-thread", (req, res, next) => {
         fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2))
         res.end('post successfully')
     }
+})
+app.get('/post/:id', (req, res, next) => {
+    var post = posts.find(it => it.id === req.params.id)
+    res.type('html')
+    res.write(
+        `
+        <h1>${post.title}</h1>
+        <p>${post.content}</p>
+        <p>${post.timestamp}</p>
+        `
+    )
+    res.write(
+        `
+        <h1>comment this!</h1>
+        <form action="/comment" method="post">
+        <textarea name="comment"></textarea>
+        <button type="submit">submit</button>
+        </form>
+        `
+    )
+    res.end()
+})
+app.get('/comment/:id', (req, res, next) => {
+    var post = posts.find(it => it.id === req.params.id)
+    res.type('html')
+    res.write(
+        `
+        <h1>${post.title}</h1>
+        <p>${post.content}</p>
+        <p>${post.timestamp}</p>
+        `
+    )
+    res.write(
+        `
+        <h1>comment this!</h1>
+        <form action="/comment" method="post">
+        <textarea name="comment"></textarea>
+        <button type="submit">submit</button>
+        </form>
+        `
+    )
+    res.end()
 })
 app.listen(port, () => {
     console.log('listening on port', port)
