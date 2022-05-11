@@ -3,8 +3,11 @@ const fs = require('fs');
 const app = express();
 const cookieParser = require('cookie-parser');
 const port = 8080
+const uuid = require('uuid').v4
 
 var users = JSON.parse(fs.readFileSync("./users.json"));
+var posts = JSON.parse(fs.readFileSync("./posts.json"));
+var comments = JSON.parse(fs.readFileSync("./comments.json"));
 app.use(cookieParser("a secret"))
 app.use(express.urlencoded({ extended: true }))
     // console.log("users ", users)
@@ -24,13 +27,14 @@ app.get("/", (req, res, next) => {
         res.end(`
       <div><a href="/">homepage</a></div>
       <div>welcome back, ${req.signedCookies.loginName?req.signedCookies.loginName:req.cookies.loginName}</div>
-      <div><a href="/postAThread">post</a></div>
+      <div><a href="/post-a-thread">post</a></div>
       <div><a href="/logout">Logout</a></div>
     `)
     } else {
         res.end(`
       <div><a href="/">homepage</a></div>
       <div><a href="/register">Register</a></div>
+      <div><a href="/post-a-thread">post</a></div>
       <div><a href="/login">Login</a></div>
     `)
     }
@@ -96,7 +100,7 @@ app.post("/login", function(req, res, next) {
         res.cookie('loginName', target.name, {
             maxAge: 1000000000,
             signed: true,
-        }).cookie('hello', 'notKnown')
+        })
         res.redirect('/')
     }
 
@@ -106,19 +110,42 @@ app.get('/logout', (req, res, next) => {
     res.clearCookie('loginName')
     res.redirect('/')
 })
-app.get("/postAThread", (req, res, next) => {
-    res.type("html")
-    res.end(
-        `
-        <h1>postAThread</h1>
-        <form method="post" action>
-        Title<br>
-        <input type="text" name="title">
-        Content<br>
-        <textarea name="content"></textarea>
-        </form>
-        `
-    )
+app.get("/post-a-thread", (req, res, next) => {
+    res.type('html')
+    if (req.signedCookies.loginName) {
+        res.type('html')
+        res.end(`
+    <h1>share?</h1>
+    <form action="/post-a-thread" method="post">
+      Title: <br>
+      <input type="text" name="title"/><br>
+      Content: <br>
+      <textarea name="content" cols="30" rows="8"></textarea><br>
+      <button>Post</button>
+    </form>
+  `)
+    } else {
+        res.end('only logged in user can post')
+    }
+
+})
+app.post("/post-a-thread", (req, res, next) => {
+    {
+        var postInfo = req.body
+        var post = {
+            id: uuid(),
+            title: postInfo.title,
+            content: postInfo.content,
+            timestamp: new Date().toISOString(),
+            owner: req.signedCookies.loginName,
+        }
+        console.log("postInfo", postInfo);
+        console.log("post", post);
+        posts.push(post)
+        console.log("posts", posts)
+        fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2))
+        res.end('post successfully')
+    }
 })
 app.listen(port, () => {
     console.log('listening on port', port)

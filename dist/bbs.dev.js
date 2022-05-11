@@ -9,7 +9,12 @@ var app = express();
 var cookieParser = require('cookie-parser');
 
 var port = 8080;
+
+var uuid = require('uuid').v4;
+
 var users = JSON.parse(fs.readFileSync("./users.json"));
+var posts = JSON.parse(fs.readFileSync("./posts.json"));
+var comments = JSON.parse(fs.readFileSync("./comments.json"));
 app.use(cookieParser("a secret"));
 app.use(express.urlencoded({
   extended: true
@@ -24,9 +29,9 @@ app.use(function (req, res, next) {
 });
 app.get("/", function (req, res, next) {
   if (req.signedCookies.loginName || req.cookies.loginName) {
-    res.end("\n      <div><a href=\"/\">homepage</a></div>\n      <div>welcome back, ".concat(req.signedCookies.loginName ? req.signedCookies.loginName : req.cookies.loginName, "</div>\n      <div><a href=\"/postAThread\">post</a></div>\n      <div><a href=\"/logout\">Logout</a></div>\n    "));
+    res.end("\n      <div><a href=\"/\">homepage</a></div>\n      <div>welcome back, ".concat(req.signedCookies.loginName ? req.signedCookies.loginName : req.cookies.loginName, "</div>\n      <div><a href=\"/post-a-thread\">post</a></div>\n      <div><a href=\"/logout\">Logout</a></div>\n    "));
   } else {
-    res.end("\n      <div><a href=\"/\">homepage</a></div>\n      <div><a href=\"/register\">Register</a></div>\n      <div><a href=\"/login\">Login</a></div>\n    ");
+    res.end("\n      <div><a href=\"/\">homepage</a></div>\n      <div><a href=\"/register\">Register</a></div>\n      <div><a href=\"/post-a-thread\">post</a></div>\n      <div><a href=\"/login\">Login</a></div>\n    ");
   }
 });
 app.get("/register", function (req, res, next) {
@@ -73,7 +78,7 @@ app.post("/login", function (req, res, next) {
     res.cookie('loginName', target.name, {
       maxAge: 1000000000,
       signed: true
-    }).cookie('hello', 'notKnown');
+    });
     res.redirect('/');
   }
 });
@@ -81,9 +86,33 @@ app.get('/logout', function (req, res, next) {
   res.clearCookie('loginName');
   res.redirect('/');
 });
-app.get("/postAThread", function (req, res, next) {
-  res.type("html");
-  res.end("\n        <h1>postAThread</h1>\n        <form method=\"post\" action>\n        Title<br>\n        <input type=\"text\" name=\"title\">\n        Content<br>\n        <textarea name=\"content\"></textarea>\n        </form>\n        ");
+app.get("/post-a-thread", function (req, res, next) {
+  res.type('html');
+
+  if (req.signedCookies.loginName) {
+    res.type('html');
+    res.end("\n    <h1>share?</h1>\n    <form action=\"/post-a-thread\" method=\"post\">\n      Title: <br>\n      <input type=\"text\" name=\"title\"/><br>\n      Content: <br>\n      <textarea name=\"content\" cols=\"30\" rows=\"8\"></textarea><br>\n      <button>Post</button>\n    </form>\n  ");
+  } else {
+    res.end('only logged in user can post');
+  }
+});
+app.post("/post-a-thread", function (req, res, next) {
+  {
+    var postInfo = req.body;
+    var post = {
+      id: uuid(),
+      title: postInfo.title,
+      content: postInfo.content,
+      timestamp: new Date().toISOString(),
+      owner: req.signedCookies.loginName
+    };
+    console.log("postInfo", postInfo);
+    console.log("post", post);
+    posts.push(post);
+    console.log("posts", posts);
+    fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2));
+    res.end('post successfully');
+  }
 });
 app.listen(port, function () {
   console.log('listening on port', port);
