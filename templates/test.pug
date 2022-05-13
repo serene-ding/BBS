@@ -1,0 +1,84 @@
+#user
+  if user.description
+    h2.green Description
+    p.description= user.description
+  else if authorised
+    h2.blue Description
+    p.description.
+      User has no description,
+      why not add one...
+  else
+    h2.red Description
+    p.description User has no description
+
+
+    console.log(posts)
+    if (req.signedCookies.loginName) {
+        res.write(`
+      <div><a href="/">homepage</a></div>
+      <div>welcome back, ${req.signedCookies.loginName}</div>
+      <div><a href="/post-a-thread">post</a></div>
+      <div><a href="/logout">Logout</a></div>
+    `)
+
+    } else {
+        res.write(`
+      <div><a href="/">homepage</a></div>
+      <div><a href="/register">Register</a></div>
+      <div><a href="/post-a-thread">post</a></div>
+      <div><a href="/login">Login</a></div>
+    `)
+    }
+    for (var post of posts) {
+        res.write(`<div><a href="/post/${post.id}">${post.title}</a></div>`)
+    }
+
+
+res.render('homepage.pug', {
+  loginName: req.signedCookies.loginName,
+  posts:posts,
+})
+
+- var posts = #{posts}
+- var loginName = #{loginName}f
+#user
+  if loginName
+    h2.green Description
+    p.description= user.description
+  
+  else
+    h2.red Description
+    p.description User has no description
+
+
+
+    // get post:/id
+    res.write(
+        `
+        <h1>${post.title}</h1>
+        <p>${post.content}</p>
+        <p>${post.timestamp}</p>
+        <p>by ${post.owner}</p>
+        `
+    )
+    console.log("comments", comments)
+
+    console.log(comments_of_post)
+    for (var comment of comments_of_post) {
+        res.write(`
+        <h1>${comment.content}</h1>
+        <p>by ${comment.commentorName}</p>
+        <p>${comment.timeStamp}</p>
+        `)
+    }
+    res.write(
+        `
+        <h1>comment this!</h1>
+        <form action="/comment/${post.id}" method="post">
+        <textarea name="comment"></textarea>
+        <button type="submit">submit</button>
+        </form>
+        `
+    )
+
+    res.end()

@@ -1,0 +1,10 @@
+extends layout.pug
+
+block content
+  <form action="/register" method="POST">
+    <div>user name<input type="text" name="name"></div>
+    <div>email<input type="text" name="email"></div>
+    <div>password<input type="text" name="password"></div> 
+    <div>passwordConfirm<input type="text" name="passwordConfirm"></div> 
+    <button type="submit">submit</button>
+    </form>

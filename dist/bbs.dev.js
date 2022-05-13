@@ -12,6 +12,8 @@ var port = 8080;
 
 var uuid = require('uuid').v4;
 
+app.locals.pretty = true;
+app.set("views", __dirname + '/templates');
 var users = JSON.parse(fs.readFileSync("./users.json"));
 var posts = JSON.parse(fs.readFileSync("./posts.json"));
 var comments = JSON.parse(fs.readFileSync("./comments.json"));
@@ -28,37 +30,11 @@ app.use(function (req, res, next) {
   next();
 });
 app.get("/", function (req, res, next) {
-  console.log(posts);
-
-  if (req.signedCookies.loginName || req.cookies.loginName) {
-    res.write("\n      <div><a href=\"/\">homepage</a></div>\n      <div>welcome back, ".concat(req.signedCookies.loginName ? req.signedCookies.loginName : req.cookies.loginName, "</div>\n      <div><a href=\"/post-a-thread\">post</a></div>\n      <div><a href=\"/logout\">Logout</a></div>\n    "));
-  } else {
-    res.write("\n      <div><a href=\"/\">homepage</a></div>\n      <div><a href=\"/register\">Register</a></div>\n      <div><a href=\"/post-a-thread\">post</a></div>\n      <div><a href=\"/login\">Login</a></div>\n    ");
-  }
-
-  var _iteratorNormalCompletion = true;
-  var _didIteratorError = false;
-  var _iteratorError = undefined;
-
-  try {
-    for (var _iterator = posts[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
-      var post = _step.value;
-      res.write("<div><a href=\"/post/".concat(post.id, "\">").concat(post.title, "</a></div>"));
-    }
-  } catch (err) {
-    _didIteratorError = true;
-    _iteratorError = err;
-  } finally {
-    try {
-      if (!_iteratorNormalCompletion && _iterator["return"] != null) {
-        _iterator["return"]();
-      }
-    } finally {
-      if (_didIteratorError) {
-        throw _iteratorError;
-      }
-    }
-  }
+  res.type("html");
+  res.render("homepage.pug", {
+    loginName: req.signedCookies.loginName,
+    posts: posts
+  });
 });
 app.get("/register", function (req, res, next) {
   console.log("register");
@@ -117,7 +93,7 @@ app.get("/post-a-thread", function (req, res, next) {
 
   if (req.signedCookies.loginName) {
     res.type('html');
-    res.end("\n    <h1>share?</h1>\n    <form action=\"/post-a-thread\" method=\"post\">\n      Title: <br>\n      <input type=\"text\" name=\"title\"/><br>\n      Content: <br>\n      <textarea name=\"content\" cols=\"30\" rows=\"8\"></textarea><br>\n      <button>Post</button>\n    </form>\n  ");
+    res.end("\n    <h1>share?</h1>\n    <form action=\"/post-a-thread\" method=\"post\">\n      Title: <br>\n      <input type=\"text\" name=\"title\"/><br>\n      Content: <br>\n      <textarea name=\"content\" cols=\"30\" rows=\"8\"></textarea><br>\n\n      <button>Post</button>\n    </form>\n  ");
   } else {
     res.end('only logged in user can post');
   }
@@ -135,7 +111,6 @@ app.post("/post-a-thread", function (req, res, next) {
     console.log("postInfo", postInfo);
     console.log("post", post);
     posts.push(post);
-    console.log("posts", posts);
     fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2));
     res.end('post successfully');
   }
@@ -143,20 +118,62 @@ app.post("/post-a-thread", function (req, res, next) {
 app.get('/post/:id', function (req, res, next) {
   var post = posts.find(function (it) {
     return it.id === req.params.id;
+  }); // res.type('html')
+
+  res.write("\n        <h1>".concat(post.title, "</h1>\n        <p>").concat(post.content, "</p>\n        <p>").concat(post.timestamp, "</p>\n        <p>by ").concat(post.owner, "</p>\n        "));
+  console.log("comments", comments);
+  var comments_of_post = comments.filter(function (it) {
+    return it.postId === post.id;
   });
-  res.type('html');
-  res.write("\n        <h1>".concat(post.title, "</h1>\n        <p>").concat(post.content, "</p>\n        <p>").concat(post.timestamp, "</p>\n        "));
-  res.write("\n        <h1>comment this!</h1>\n        <form action=\"/comment\" method=\"post\">\n        <textarea name=\"comment\"></textarea>\n        <button type=\"submit\">submit</button>\n        </form>\n        ");
+  console.log(comments_of_post);
+  var _iteratorNormalCompletion = true;
+  var _didIteratorError = false;
+  var _iteratorError = undefined;
+
+  try {
+    for (var _iterator = comments_of_post[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+      var comment = _step.value;
+      res.write("\n        <h1>".concat(comment.content, "</h1>\n        <p>by ").concat(comment.commentorName, "</p>\n        <p>").concat(comment.timeStamp, "</p>\n        "));
+    }
+  } catch (err) {
+    _didIteratorError = true;
+    _iteratorError = err;
+  } finally {
+    try {
+      if (!_iteratorNormalCompletion && _iterator["return"] != null) {
+        _iterator["return"]();
+      }
+    } finally {
+      if (_didIteratorError) {
+        throw _iteratorError;
+      }
+    }
+  }
+
+  res.write("\n        <h1>comment this!</h1>\n        <form action=\"/comment/".concat(post.id, "\" method=\"post\">\n        <textarea name=\"comment\"></textarea>\n        <button type=\"submit\">submit</button>\n        </form>\n        "));
   res.end();
 });
-app.get('/comment/:id', function (req, res, next) {
-  var post = posts.find(function (it) {
-    return it.id === req.params.id;
-  });
-  res.type('html');
-  res.write("\n        <h1>".concat(post.title, "</h1>\n        <p>").concat(post.content, "</p>\n        <p>").concat(post.timestamp, "</p>\n        "));
-  res.write("\n        <h1>comment this!</h1>\n        <form action=\"/comment\" method=\"post\">\n        <textarea name=\"comment\"></textarea>\n        <button type=\"submit\">submit</button>\n        </form>\n        ");
-  res.end();
+app.post('/comment/:id', function (req, res, next) {
+  console.log(req.body);
+  var commentInfo = req.body;
+
+  if (req.signedCookies.loginName) {
+    var comment = {
+      content: commentInfo.comment,
+      timeStamp: new Date().toISOString(),
+      commentorName: req.signedCookies.loginName,
+      postId: req.params.id
+    };
+    comments.push(comment); // res.type("html")
+    // res.write('comment successfully')
+
+    res.redirect("/post/".concat(req.params.id));
+  } else {
+    res.end("\n        please login to comment :)\n        ");
+  }
+
+  fs.writeFileSync("./comments.json", JSON.stringify(comments, null, 2));
+  console.log("ok");
 });
 app.listen(port, function () {
   console.log('listening on port', port);

@@ -1,0 +1,15 @@
+extends layout.pug
+block content
+    <h1>Login</h1>
+    if session.login_failure_reason
+      p= session.login_failure_reason
+    <form action="/login" method="post">
+      <div>Name: <input type="text" name="name"></div>
+      <div>Password: <input type="text" name="password"></div>
+      if session.loginFailureCount >= 3
+        <div>ReCaptcha: <img src="/captcha"></div>
+        <input type="text" name="captcha">
+      //- if session.LoginFailureCount < 3
+      //-   p not yet
+      <button>Submit</button>
+    </form>  

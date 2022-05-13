@@ -1,0 +1,18 @@
+extends layout.pug
+
+block content
+  h1= post.title
+  p= post.content
+  ul
+    each comment in comments
+      li 
+        | #{comment.content} by 
+        a(href="/user/"+comment.commentorName)= comment.commentorName
+  if loginName
+    form(action=`/comment/${post.id}` method="post")
+      div give a comment &#128512
+      textarea(name="content" rows="4" cols="30")
+      br
+      button submit
+  else
+    p wanna comment? please#[a(href="/login") login]

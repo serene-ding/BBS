@@ -1,17 +1,44 @@
+// BBS by Serene :)
 const express = require('express');
 const fs = require('fs');
 const app = express();
 const cookieParser = require('cookie-parser');
+const { resourceUsage } = require('process');
 const port = 8080
 const uuid = require('uuid').v4
+const svgCaptcha = require('svg-captcha')
 
+
+
+
+
+app.locals.pretty = true
+app.set("views", __dirname + '/templates')
 var users = JSON.parse(fs.readFileSync("./users.json"));
 var posts = JSON.parse(fs.readFileSync("./posts.json"));
 var comments = JSON.parse(fs.readFileSync("./comments.json"));
 app.use(cookieParser("a secret"))
 app.use(express.urlencoded({ extended: true }))
-    // console.log("users ", users)
-    // app.use(express.urlencoded({ extended: true }))
+
+var sessionObjects = {}
+app.use(function sessionMiddleware(req, res, next) {
+    if (req.cookies.sessionId) {
+
+    } else {
+        var sessionId = uuid()
+        res.cookie("sessionId", sessionId)
+        req.cookies.sessionId = sessionId
+
+    }
+    if (sessionObjects[req.cookies.sessionId]) {
+        req.session = sessionObjects[req.cookies.sessionId]
+    } else {
+        req.session = (sessionObjects[req.cookies.sessionId] = {})
+    }
+    console.log("middleware", sessionObjects)
+    next()
+})
+
 app.use((req, res, next) => {
     console.log(req.method, req.url)
 
@@ -20,44 +47,32 @@ app.use((req, res, next) => {
     next()
 })
 
+app.use
+app.use((req, res, next) => {
+    console.log(req.method, req.url)
+
+    console.log("cookies", req.cookies)
+    console.log("signedCookies", req.signedCookies)
+    next()
+})
+
+
+app.use(express.static(__dirname + '/assets'))
 app.get("/", (req, res, next) => {
 
-    console.log(posts)
-    if (req.signedCookies.loginName || req.cookies.loginName) {
-        res.write(`
-      <div><a href="/">homepage</a></div>
-      <div>welcome back, ${req.signedCookies.loginName?req.signedCookies.loginName:req.cookies.loginName}</div>
-      <div><a href="/post-a-thread">post</a></div>
-      <div><a href="/logout">Logout</a></div>
-    `)
-    } else {
-        res.write(`
-      <div><a href="/">homepage</a></div>
-      <div><a href="/register">Register</a></div>
-      <div><a href="/post-a-thread">post</a></div>
-      <div><a href="/login">Login</a></div>
-    `)
-    }
-    for (var post of posts) {
-        res.write(`<div><a href="/post/${post.id}">${post.title}</a></div>`)
-    }
+    res.type("html")
 
-
+    res.render('index.pug', {
+        posts: posts,
+        loginName: req.signedCookies.loginName
+    })
 })
 app.get("/register", (req, res, next) => {
     console.log("register")
     res.type("html")
-    res.end(
-        `
-        <form action="/register" method="POST">
-        <div>user name<input type="text" name="name"></div>
-        <div>email<input type="text" name="email"></div>
-        <div>password<input type="text" name="password"></div> 
-        <div>passwordConfirm<input type="text" name="passwordConfirm"></div> 
-        <button type="submit">submit</button>
-        </form>
-        `
-    )
+    res.render("register.pug")
+
+
 
 })
 
@@ -66,6 +81,7 @@ app.post("/register", (req, res, next) => {
     console.log(regInfo)
     if (regInfo.password != regInfo.passwordConfirm) {
         res.end("not same passwords!")
+        return
     }
     // if (users.some(it => it.name === regInfo.name)) {
     //     res.end("already exists")
@@ -86,25 +102,45 @@ app.post("/register", (req, res, next) => {
     fs.writeFileSync("./users.json", JSON.stringify(users, null, 2))
 })
 app.get("/login", function(req, res, next) {
-    res.end(`
-    <h1>Login</h1>
-    <form action="/login" method="post">
-      <div>Name: <input type="text" name="name"></div>
-      <div>Password: <input type="password" name="password"></div>
-      <button>Submit</button>
-    </form>
-  `)
+    var returnUrl = req.get('referer') ? req.get('referer') : '/'
+    console.log("get login", req.session)
+    res.render('login.pug', {
+        returnUrl: returnUrl,
+        session: req.session
+    })
+    console.log("get login sessionObject", sessionObjects)
 })
+
 app.post("/login", function(req, res, next) {
     var loginInfo = req.body
+    console.log(loginInfo)
+    console.log("req.session: ", req.session)
+    console.log(req.body.captcha, req.session.captcha)
+    if (req.body.captcha && req.body.captcha !== req.session.captcha) {
+        req.session.login_failure_reason = "wrong captcha 🤗"
+        res.redirect("/login")
+        return
+    }
+
     var target = users.find(it => it.name == loginInfo.name && it.password == loginInfo.password)
-    console.log(target)
+    console.log("target", target)
     if (target) {
         res.cookie('loginName', target.name, {
             maxAge: 1000000000,
             signed: true,
         })
+        req.session.loginFailureCount = 0
+        req.session.login_failure_reason = false
         res.redirect('/')
+    } else {
+        if (users.find(it => it.name == loginInfo.name)) {
+            req.session.loginFailureCount = (req.session.loginFailureCount ? req.session.loginFailureCount : 0) + 1
+            req.session.login_failure_reason = "invalid password 😶"
+            res.redirect("/login")
+        } else {
+            res.render('accountNotFound.pug')
+        }
+
     }
 
 })
@@ -113,6 +149,8 @@ app.get('/logout', (req, res, next) => {
     res.clearCookie('loginName')
     res.redirect('/')
 })
+
+
 app.get("/post-a-thread", (req, res, next) => {
     res.type('html')
     if (req.signedCookies.loginName) {
@@ -124,6 +162,7 @@ app.get("/post-a-thread", (req, res, next) => {
       <input type="text" name="title"/><br>
       Content: <br>
       <textarea name="content" cols="30" rows="8"></textarea><br>
+
       <button>Post</button>
     </form>
   `)
@@ -132,6 +171,8 @@ app.get("/post-a-thread", (req, res, next) => {
     }
 
 })
+
+
 app.post("/post-a-thread", (req, res, next) => {
     {
         var postInfo = req.body
@@ -145,53 +186,77 @@ app.post("/post-a-thread", (req, res, next) => {
         console.log("postInfo", postInfo);
         console.log("post", post);
         posts.push(post)
-        console.log("posts", posts)
+
         fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2))
-        res.end('post successfully')
+        res.redirect('/post/' + post.id)
     }
 })
+
+
 app.get('/post/:id', (req, res, next) => {
     var post = posts.find(it => it.id === req.params.id)
-    res.type('html')
-    res.write(
-        `
-        <h1>${post.title}</h1>
-        <p>${post.content}</p>
-        <p>${post.timestamp}</p>
-        `
-    )
-    res.write(
-        `
-        <h1>comment this!</h1>
-        <form action="/comment" method="post">
-        <textarea name="comment"></textarea>
-        <button type="submit">submit</button>
-        </form>
-        `
-    )
-    res.end()
+    console.log("post", post)
+    res.type("html")
+    if (post) {
+        var comments_of_post = comments.filter(it => { return it.postId === post.id })
+        var loginName = req.signedCookies.loginName
+        res.render("post.pug", {
+            loginName: req.signedCookies.loginName,
+            comments: comments_of_post,
+            post: post
+        })
+    } else {
+        res.render("404.pug")
+    }
+
+
+
+
 })
-app.get('/comment/:id', (req, res, next) => {
-    var post = posts.find(it => it.id === req.params.id)
-    res.type('html')
-    res.write(
-        `
-        <h1>${post.title}</h1>
-        <p>${post.content}</p>
-        <p>${post.timestamp}</p>
-        `
-    )
-    res.write(
-        `
-        <h1>comment this!</h1>
-        <form action="/comment" method="post">
-        <textarea name="comment"></textarea>
-        <button type="submit">submit</button>
-        </form>
-        `
-    )
-    res.end()
+
+
+app.post('/comment/:id', (req, res, next) => {
+    console.log(req.body)
+    var commentInfo = req.body
+    if (req.signedCookies.loginName) {
+        var comment = {
+            content: commentInfo.comment,
+            timeStamp: new Date().toISOString(),
+            commentorName: req.signedCookies.loginName,
+            postId: req.params.id
+        }
+        comments.push(comment)
+
+        // res.type("html")
+        // res.write('comment successfully')
+        res.redirect(`/post/${req.params.id}`)
+    } else {
+        res.end(`
+        please login to comment :)
+        `)
+    }
+
+    fs.writeFileSync("./comments.json", JSON.stringify(comments, null, 2))
+    console.log("ok")
+
+
 })
+
+
+var captchaText = {}
+app.get("/captcha", (req, res, next) => {
+    var captcha = svgCaptcha.create({
+        color: true,
+        noise: 3,
+    })
+    req.session.captcha = captcha.text
+    console.log("get captcha sessionObjects", sessionObjects)
+    console.log(req.session)
+    res.type("svg").end(captcha.data)
+    console.log("req.session.captcha", req.session.captcha)
+})
+
+
 app.listen(port, () => {
     console.log('listening on port', port)
 })

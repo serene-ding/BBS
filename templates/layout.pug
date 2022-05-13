@@ -1,0 +1,29 @@
+doctype html
+
+html
+  head
+    meta(charset="UTF-8")
+    title serene's bbs
+    block scripts
+      script(src='/jquery.min.js')
+  body
+    header
+      a(href="/") homepage
+      div.header
+        if loginName
+          span(title=`hi, ${loginName}`) welcome, #{loginName}
+          |
+          |
+          a(href="/post-a-thread") add a thread
+          |
+          |
+          a(href="/logout") log out
+        else
+          a(href="/register") register
+          |
+          |
+          a(href="/login") log in
+    block content
+    block foot
+      #footer
+        p &copy;
