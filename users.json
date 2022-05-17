@@ -1,22 +1,21 @@
-[
-  {
-    "name": "a",
-    "email": "a",
-    "password": "a"
-  },
-  {
-    "name": "candy",
-    "email": "candy",
-    "password": "candy"
-  },
-  {
-    "name": "nignt",
-    "email": "night",
-    "password": "a"
-  },
-  {
-    "name": "jaecan",
-    "email": "jaecan",
-    "password": "a"
-  }
+[{
+        "name": "a",
+        "email": "a",
+        "password": "0cc175b9c0f1b6a831c399e269772661"
+    },
+    {
+        "name": "candy",
+        "email": "candy",
+        "password": "c48ba993d35c3abe0380f91738fe2a34"
+    },
+    {
+        "name": "nignt",
+        "email": "night",
+        "password": "0cc175b9c0f1b6a831c399e269772661"
+    },
+    {
+        "name": "jaecan",
+        "email": "jaecan",
+        "password": "0cc175b9c0f1b6a831c399e269772661"
+    }
 ]

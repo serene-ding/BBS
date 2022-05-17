@@ -12,4 +12,10 @@ block content
       //- if session.LoginFailureCount < 3
       //-   p not yet
       <button>Submit</button>
-    </form>  
+    </form> 
+    script.
+      $('form').on('submit',(e)=>{
+        var pwd = $('input[name="password"]').val()
+        pwd = SparkMD5.hash(pwd)
+        $('input[name="password"]').val(pwd)
+      })  

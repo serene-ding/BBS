@@ -6,12 +6,13 @@ html
     title serene's bbs
     block scripts
       script(src='/jquery.min.js')
+      script(src='/spark-md5.min.js')
   body
     header
       a(href="/") homepage
       div.header
         if loginName
-          span(title=`hi, ${loginName}`) welcome, #{loginName}
+          div(title=`hi, ${loginName}`) welcome, #{loginName}
           |
           |
           a(href="/post-a-thread") add a thread

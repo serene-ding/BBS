@@ -7,7 +7,9 @@ const { resourceUsage } = require('process');
 const port = 8080
 const uuid = require('uuid').v4
 const svgCaptcha = require('svg-captcha')
-
+const md5 = require('md5')
+const Database = require("better-sqlite3")
+const db = new Database("./bbs.sqlite3")
 
 
 
@@ -17,6 +19,7 @@ app.set("views", __dirname + '/templates')
 var users = JSON.parse(fs.readFileSync("./users.json"));
 var posts = JSON.parse(fs.readFileSync("./posts.json"));
 var comments = JSON.parse(fs.readFileSync("./comments.json"));
+
 app.use(cookieParser("a secret"))
 app.use(express.urlencoded({ extended: true }))
 
@@ -35,24 +38,24 @@ app.use(function sessionMiddleware(req, res, next) {
     } else {
         req.session = (sessionObjects[req.cookies.sessionId] = {})
     }
-    console.log("middleware", sessionObjects)
+    // console.log("middleware", sessionObjects)
     next()
 })
 
 app.use((req, res, next) => {
     console.log(req.method, req.url)
 
-    console.log("cookies", req.cookies)
-    console.log("signedCookies", req.signedCookies)
+    // console.log("cookies", req.cookies)
+    // console.log("signedCookies", req.signedCookies)
     next()
 })
 
-app.use
+
 app.use((req, res, next) => {
     console.log(req.method, req.url)
 
-    console.log("cookies", req.cookies)
-    console.log("signedCookies", req.signedCookies)
+    // console.log("cookies", req.cookies)
+    // console.log("signedCookies", req.signedCookies)
     next()
 })
 
@@ -61,7 +64,10 @@ app.use(express.static(__dirname + '/assets'))
 app.get("/", (req, res, next) => {
 
     res.type("html")
-
+    var posts = db.prepare(`SELECT posts.rowid AS postId, title,content,createdAt,userId,name 
+    FROM posts JOIN users ON posts.userId = users.rowid 
+    ORDER BY createdAt DESC`).all()
+    console.log("/ posts", posts)
     res.render('index.pug', {
         posts: posts,
         loginName: req.signedCookies.loginName
@@ -95,11 +101,20 @@ app.post("/register", (req, res, next) => {
         password: regInfo.password,
     }
     console.log("users", users)
+    try {
+        db.prepare("INSERT INTO users (name, email, password) VALUES (?,?,?)").run(user.name, user.email, user.password)
+    } catch (e) {
+        console.log(e)
+        if (e.code == 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+            res.type("html").end("username or email already exists")
+        } else {
+            throw e
+        }
+    }
 
     res.type("html")
     res.end('register success, go <a href="/login">login</a>')
-    users.push(user)
-    fs.writeFileSync("./users.json", JSON.stringify(users, null, 2))
+
 })
 app.get("/login", function(req, res, next) {
     var returnUrl = req.get('referer') ? req.get('referer') : '/'
@@ -113,17 +128,21 @@ app.get("/login", function(req, res, next) {
 
 app.post("/login", function(req, res, next) {
     var loginInfo = req.body
-    console.log(loginInfo)
-    console.log("req.session: ", req.session)
-    console.log(req.body.captcha, req.session.captcha)
+        // console.log(loginInfo)
+        // console.log("req.session: ", req.session)
+        // console.log(req.body.captcha, req.session.captcha)
     if (req.body.captcha && req.body.captcha !== req.session.captcha) {
         req.session.login_failure_reason = "wrong captcha 🤗"
         res.redirect("/login")
         return
     }
+    console.log("loginInfo.password", loginInfo.password)
+        // var target = users.find(it => it.name == loginInfo.name && it.password == loginInfo.password)
+        // console.log("target", target)
+    var target = db.prepare("SELECT * FROM users WHERE name = $name AND password = $password")
+        .get(loginInfo)
+    console.log("target.password", target.password)
 
-    var target = users.find(it => it.name == loginInfo.name && it.password == loginInfo.password)
-    console.log("target", target)
     if (target) {
         res.cookie('loginName', target.name, {
             maxAge: 1000000000,
@@ -174,31 +193,41 @@ app.get("/post-a-thread", (req, res, next) => {
 
 
 app.post("/post-a-thread", (req, res, next) => {
-    {
-        var postInfo = req.body
-        var post = {
-            id: uuid(),
+
+    var postInfo = req.body
+    var user = db.prepare("SELECT rowid as id,* FROM users WHERE name = ?").get(req.signedCookies.loginName)
+    console.log("database post a thread", user, req.signedCookies.loginName)
+        // the userId in post is users.id is uers.rowid
+    var post = {
+
             title: postInfo.title,
             content: postInfo.content,
-            timestamp: new Date().toISOString(),
-            owner: req.signedCookies.loginName,
+            createdAt: new Date().toISOString(),
+            userId: user.id,
         }
-        console.log("postInfo", postInfo);
-        console.log("post", post);
-        posts.push(post)
+        // console.log("postInfo", postInfo);
+        // console.log("post", post);
+    var info = db.prepare("INSERT INTO posts (title,content,createdAt,userId) VALUES (:title,:content,:createdAt,:userId)").run(post)
+    res.redirect('/post/' + info.lastInsertRowid)
 
-        fs.writeFileSync('./posts.json', JSON.stringify(posts, null, 2))
-        res.redirect('/post/' + post.id)
-    }
 })
 
 
 app.get('/post/:id', (req, res, next) => {
-    var post = posts.find(it => it.id === req.params.id)
+    var postId = req.params.id
+    var post = db.prepare(
+        `SELECT posts.rowid AS postId, title,content,createdAt,userId,name 
+        FROM posts JOIN users ON posts.userId = users.rowid 
+        where postId = ?
+        `
+    ).get(postId)
     console.log("post", post)
     res.type("html")
     if (post) {
-        var comments_of_post = comments.filter(it => { return it.postId === post.id })
+        var comments_of_post = db.prepare(`SELECT comments.rowid AS commentId,content,createdAt,userId,name 
+        FROM comments 
+        JOIN users ON comments.userId = users.rowid 
+        WHERE comments.postId = ?`).all(postId)
         var loginName = req.signedCookies.loginName
         res.render("post.pug", {
             loginName: req.signedCookies.loginName,
@@ -218,14 +247,16 @@ app.get('/post/:id', (req, res, next) => {
 app.post('/comment/:id', (req, res, next) => {
     console.log(req.body)
     var commentInfo = req.body
-    if (req.signedCookies.loginName) {
+    var user = db.prepare("SELECT rowid,* FROM users WHERE name = ?").get(req.signedCookies.loginName)
+    console.log(user)
+    if (user) {
         var comment = {
-            content: commentInfo.comment,
-            timeStamp: new Date().toISOString(),
-            commentorName: req.signedCookies.loginName,
+            content: commentInfo.content,
+            createdAt: new Date().toISOString(),
+            userId: user.rowid,
             postId: req.params.id
         }
-        comments.push(comment)
+        db.prepare("INSERT INTO comments VALUES ($content,$createdAt,$userId,$postId)").run(comment)
 
         // res.type("html")
         // res.write('comment successfully')
@@ -236,14 +267,13 @@ app.post('/comment/:id', (req, res, next) => {
         `)
     }
 
-    fs.writeFileSync("./comments.json", JSON.stringify(comments, null, 2))
+
     console.log("ok")
 
 
 })
 
 
-var captchaText = {}
 app.get("/captcha", (req, res, next) => {
     var captcha = svgCaptcha.create({
         color: true,
@@ -256,7 +286,31 @@ app.get("/captcha", (req, res, next) => {
     console.log("req.session.captcha", req.session.captcha)
 })
 
+app.delete("/post/:id", function(req, res, next) {
+    // console.log("delete")
+    // console.log("req.signedCookies.loginName", req.signedCookies.loginName)
 
+    if (req.signedCookies.loginName) {
+        var post = posts.find(it => it.id == req.params.id)
+        if (post) {
+            if (post.owner == req.signedCookies.loginName) {
+                var idx = posts.findIndex(it => it.id == req.params.id)
+                console.log("delete post", idx)
+                posts.splice(idx, 1)
+
+
+                fs.writeFileSync("./posts.json", JSON.stringify(posts, null, 2))
+                res.end("delete successfully")
+
+            }
+        } else {
+
+            res.end("already deleted")
+        }
+    } else {
+        res.end("not log in" + String.fromCodePoint(0x1F621))
+    }
+})
 app.listen(port, () => {
     console.log('listening on port', port)
 })

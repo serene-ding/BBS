@@ -8,3 +8,15 @@ block content
     <div>passwordConfirm<input type="text" name="passwordConfirm"></div> 
     <button type="submit">submit</button>
     </form>
+  script.
+      $('form').on('submit',(e)=>{
+        var pwd = $('input[name="password"]').val()
+        pwd = SparkMD5.hash(pwd)
+        $('input[name="password"]').val(pwd)
+      }) 
+      
+      $('form').on('submit',(e)=>{
+        var pwd = $('input[name="passwordConfirm"]').val()
+        pwd = SparkMD5.hash(pwd)
+        $('input[name="passwordConfirm"]').val(pwd)
+      }) 

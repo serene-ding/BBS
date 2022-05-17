@@ -3,16 +3,29 @@ extends layout.pug
 block content
   h1= post.title
   p= post.content
+  p= "by" + " " + post.name
+  small= post.createdAt
+  if post.name == loginName
+    button.delete(data-post-id=post.postId) delete
   ul
     each comment in comments
       li 
         | #{comment.content} by 
-        a(href="/user/"+comment.commentorName)= comment.commentorName
+        a(href="/user/"+comment.userId)= comment.name
+        button.delete-comment(data-comment-id=comment.commentId) delete
   if loginName
-    form(action=`/comment/${post.id}` method="post")
+    form(action=`/comment/${post.postId}` method="post")
       div give a comment &#128512
       textarea(name="content" rows="4" cols="30")
       br
       button submit
   else
     p wanna comment? please#[a(href="/login") login]
+  script. 
+    $("button.delete").on("click", async function(e) {
+      var postId = this.dataset.postId 
+      await fetch('/post/'+postId, {
+        method: 'DELETE'
+      })
+      location.href = "/"
+    })     
