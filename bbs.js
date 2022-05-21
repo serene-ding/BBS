@@ -10,15 +10,14 @@ const svgCaptcha = require('svg-captcha')
 const md5 = require('md5')
 const Database = require("better-sqlite3")
 const db = new Database("./bbs.sqlite3")
-
+const formidable = require('formidable')
 
 
 
 app.locals.pretty = true
 app.set("views", __dirname + '/templates')
-var users = JSON.parse(fs.readFileSync("./users.json"));
-var posts = JSON.parse(fs.readFileSync("./posts.json"));
-var comments = JSON.parse(fs.readFileSync("./comments.json"));
+
+
 
 app.use(cookieParser("a secret"))
 app.use(express.urlencoded({ extended: true }))
@@ -41,7 +40,15 @@ app.use(function sessionMiddleware(req, res, next) {
     // console.log("middleware", sessionObjects)
     next()
 })
+app.use(function(req, res, next) {
+    if (req.signedCookies.loginName) {
+        req.loginUser = db.prepare("SELECT rowid as loginUserId,name,email FROM users WHERE name = ?").get(req.signedCookies.loginName)
+    } else {
+        req.loginUser = null
+    }
 
+    next()
+})
 app.use((req, res, next) => {
     console.log(req.method, req.url)
 
@@ -61,10 +68,11 @@ app.use((req, res, next) => {
 
 
 app.use(express.static(__dirname + '/assets'))
+app.use(express.static(__dirname + '/uploads'))
 app.get("/", (req, res, next) => {
 
     res.type("html")
-    var posts = db.prepare(`SELECT posts.rowid AS postId, title,content,createdAt,userId,name 
+    var posts = db.prepare(`SELECT posts.rowid AS postId, title,content,createdAt,userId,name,avatar 
     FROM posts JOIN users ON posts.userId = users.rowid 
     ORDER BY createdAt DESC`).all()
     console.log("/ posts", posts)
@@ -83,38 +91,52 @@ app.get("/register", (req, res, next) => {
 })
 
 app.post("/register", (req, res, next) => {
-    var regInfo = req.body
-    console.log(regInfo)
-    if (regInfo.password != regInfo.passwordConfirm) {
-        res.end("not same passwords!")
-        return
-    }
-    // if (users.some(it => it.name === regInfo.name)) {
-    //     res.end("already exists")
-    // }
-    // if (users.some(it => it.email == regInfo.email)) {
-    //     res.end('email already exists')
-    // }
-    var user = {
-        name: regInfo.name,
-        email: regInfo.email,
-        password: regInfo.password,
-    }
-    console.log("users", users)
-    try {
-        db.prepare("INSERT INTO users (name, email, password) VALUES (?,?,?)").run(user.name, user.email, user.password)
-    } catch (e) {
-        console.log(e)
-        if (e.code == 'SQLITE_CONSTRAINT_PRIMARYKEY') {
-            res.type("html").end("username or email already exists")
-        } else {
-            throw e
+    const form = formidable({
+        multiples: true,
+        keepExtensions: true,
+        uploadDir: "./uploads"
+
+
+    })
+    var activateNumber = uuid().slice(0, 4)
+    form.parse(req, (err, fields, files) => {
+        var regInfo = fields
+        var avatar = files.avatar
+        console.log("regInfo", regInfo,
+            "files", files)
+        if (regInfo.password != regInfo.passwordConfirm) {
+            res.end("not same passwords!")
+            return
         }
+        var user = {
+            name: regInfo.name,
+            email: regInfo.email,
+            password: regInfo.password,
+            avatar: files.avatar.newFilename,
+            avtivated: activateNumber
+        }
+
+        try {
+            db.prepare("INSERT INTO users (name, email, password,avatar,activated) VALUES (?,?,?,?,?)").run(user.name, user.email, user.password, user.avatar, user.avtivated)
+        } catch (e) {
+            console.log(e)
+            if (e.code == 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+                res.type("html").end("username or email already exists")
+            } else {
+                throw e
+            }
+        }
+        var activateLink = `http://${req.get("host")}/account-activate/${activateNumber}`
+        res.type("html")
+        res.end('please click the activate link that has been sent to your email' + `     ` + activateLink)
+    })
+})
+app.get("/account-activate/:activeId", (req, res, next) => {
+    var user = db.prepare("SELECT rowid, * FROM users WHERE activated = ?").get(req.params.activeId)
+    if (user) {
+        db.prepare("UPDATE users SET activated = null where rowid = ?").run(user.rowid)
+        res.type("html").end("login")
     }
-
-    res.type("html")
-    res.end('register success, go <a href="/login">login</a>')
-
 })
 app.get("/login", function(req, res, next) {
     var returnUrl = req.get('referer') ? req.get('referer') : '/'
@@ -141,9 +163,10 @@ app.post("/login", function(req, res, next) {
         // console.log("target", target)
     var target = db.prepare("SELECT * FROM users WHERE name = $name AND password = $password")
         .get(loginInfo)
-    console.log("target.password", target.password)
+
 
     if (target) {
+        console.log("target.password", target.password)
         res.cookie('loginName', target.name, {
             maxAge: 1000000000,
             signed: true,
@@ -152,12 +175,16 @@ app.post("/login", function(req, res, next) {
         req.session.login_failure_reason = false
         res.redirect('/')
     } else {
-        if (users.find(it => it.name == loginInfo.name)) {
+        var target = db.prepare("SELECT * FROM users WHERE name = $name").get(loginInfo)
+        if (target) {
             req.session.loginFailureCount = (req.session.loginFailureCount ? req.session.loginFailureCount : 0) + 1
             req.session.login_failure_reason = "invalid password 😶"
             res.redirect("/login")
         } else {
-            res.render('accountNotFound.pug')
+            res.render('register.pug', { notExist: true })
+
+
+
         }
 
     }
@@ -216,7 +243,7 @@ app.post("/post-a-thread", (req, res, next) => {
 app.get('/post/:id', (req, res, next) => {
     var postId = req.params.id
     var post = db.prepare(
-        `SELECT posts.rowid AS postId, title,content,createdAt,userId,name 
+        `SELECT posts.rowid AS postId, title,content,createdAt,userId,name,avatar
         FROM posts JOIN users ON posts.userId = users.rowid 
         where postId = ?
         `
@@ -224,7 +251,7 @@ app.get('/post/:id', (req, res, next) => {
     console.log("post", post)
     res.type("html")
     if (post) {
-        var comments_of_post = db.prepare(`SELECT comments.rowid AS commentId,content,createdAt,userId,name 
+        var comments_of_post = db.prepare(`SELECT comments.rowid AS commentId,content,createdAt,userId,name,avatar
         FROM comments 
         JOIN users ON comments.userId = users.rowid 
         WHERE comments.postId = ?`).all(postId)
@@ -232,7 +259,9 @@ app.get('/post/:id', (req, res, next) => {
         res.render("post.pug", {
             loginName: req.signedCookies.loginName,
             comments: comments_of_post,
-            post: post
+            post: post,
+            user: req.loginUser
+
         })
     } else {
         res.render("404.pug")
@@ -256,11 +285,15 @@ app.post('/comment/:id', (req, res, next) => {
             userId: user.rowid,
             postId: req.params.id
         }
-        db.prepare("INSERT INTO comments VALUES ($content,$createdAt,$userId,$postId)").run(comment)
+        var insertInfo = db.prepare("INSERT INTO comments VALUES ($content,$createdAt,$userId,$postId)").run(comment)
 
         // res.type("html")
         // res.write('comment successfully')
-        res.redirect(`/post/${req.params.id}`)
+        res.json({
+            userId: user.rowid,
+            userName: user.name,
+            commentId: insertInfo.lastInsertRowid
+        })
     } else {
         res.end(`
         please login to comment :)
@@ -290,16 +323,13 @@ app.delete("/post/:id", function(req, res, next) {
     // console.log("delete")
     // console.log("req.signedCookies.loginName", req.signedCookies.loginName)
 
-    if (req.signedCookies.loginName) {
-        var post = posts.find(it => it.id == req.params.id)
+    if (req.loginUser) {
+        var post = db.prepare("SELECT * FROM posts WHERE rowid = ?").get(req.params.id)
+        console.log("delete post", post)
         if (post) {
-            if (post.owner == req.signedCookies.loginName) {
-                var idx = posts.findIndex(it => it.id == req.params.id)
-                console.log("delete post", idx)
-                posts.splice(idx, 1)
+            if (post.userId == req.loginUser.loginUserId) {
 
-
-                fs.writeFileSync("./posts.json", JSON.stringify(posts, null, 2))
+                db.prepare("DELETE FROM posts WHERE rowid = ?").run(req.params.id)
                 res.end("delete successfully")
 
             }
@@ -311,6 +341,34 @@ app.delete("/post/:id", function(req, res, next) {
         res.end("not log in" + String.fromCodePoint(0x1F621))
     }
 })
+
+app.delete("/comment/:commentId", function(req, res, next) {
+    // console.log("delete")
+    // console.log("req.signedCookies.loginName", req.signedCookies.loginName)
+
+    if (req.loginUser) {
+        var comment = db.prepare("SELECT * FROM comments WHERE rowid = ?").get(req.params.commentId)
+        if (comment.userId == req.loginUser.loginUserId) {
+            db.prepare("DELETE FROM comments WHERE rowid = ?").run(req.params.commentId)
+            res.end("ok")
+            console.log("delete my comment")
+        } else {
+            var post = db.prepare("SELECT * FROM comments WHERE rowid = ?").get(comment.postId)
+            if (post.userId == req.loginUser.loginUserId) {
+                db.prepare("DELETE FROM comments WHERE rowid = ?").run(req.params.commentId)
+                res.end("ok your post")
+                console.log("delete my post's comment")
+            } else {
+                res.end("it is not your comment")
+            }
+        }
+
+    } else {
+
+    }
+})
+
+
 app.listen(port, () => {
     console.log('listening on port', port)
 })

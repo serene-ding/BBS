@@ -1,24 +1,54 @@
 extends layout.pug
 
 block content
-  h1= post.title
+  h1(style={overflow: "hidden"} )= post.title
+    img(src="/"+post.avatar width=30 height=30 )
   p= post.content
   p= "by" + " " + post.name
   small= post.createdAt
   if post.name == loginName
     button.delete(data-post-id=post.postId) delete
-  ul
+  ul.comment-list
     each comment in comments
-      li 
+      li(style={overflow: "hidden"}) 
         | #{comment.content} by 
         a(href="/user/"+comment.userId)= comment.name
-        button.delete-comment(data-comment-id=comment.commentId) delete
+        img(src="/"+comment.avatar width=24 height=24 )
+        if loginName && user && (comment.userId == user.loginUserId || post.userId == user.loginUserId)
+          button.delete-comment(data-comment-id=comment.commentId) delete
   if loginName
     form(action=`/comment/${post.postId}` method="post")
       div give a comment &#128512
       textarea(name="content" rows="4" cols="30")
       br
       button submit
+      script.
+        $("form").submit(async function(e) {
+          e.preventDefault();
+          var action = this.action
+          var commentContent= $(this).find("textarea").val()
+          var data = await fetch(action,{
+            method:"POST",
+            body:$(this).serialize(),
+            headers:{
+              "Content-Type": "application/x-www-form-urlencoded"
+            }
+              }).then(it=>it.json());
+          $("ul").append(
+            `
+            <li>
+            ${commentContent} 
+            by 
+            <a href="/user/${data.userId}">${data.userName}</a>
+            <button class="delete-comment" data-comment-id="${data.commentId}"> delete </button>
+            </li>
+            `
+          )
+          $(this).find('textarea').val("")
+            }
+          )
+          
+        
   else
     p wanna comment? please#[a(href="/login") login]
   script. 
@@ -28,4 +58,21 @@ block content
         method: 'DELETE'
       })
       location.href = "/"
-    })     
+    })  
+    $("button.delete-comment").on("click", async function(e) {
+      var commentId = this.dataset.commentId 
+      await fetch('/comment/'+commentId, {
+        method: 'DELETE'
+      })
+      $(this).parent("li").remove()
+      location.href = location.href
+    })
+    $('ul.comment-list').on('click', 'button.delete-comment', async function (e) {
+      var commentId = this.dataset.commentId 
+      await fetch('/comment/'+commentId, {
+        method: 'DELETE'
+      })
+      $(this).parent("li").remove()
+      
+    })
+

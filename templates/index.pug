@@ -2,6 +2,8 @@ extends layout.pug
 
 block content
   each post in posts
+    hr
     div
       a(href="/post/" + post.postId)= post.title 
+      img(src="/"+post.avatar width=30 height=30 )
       div  by #{post.name}
